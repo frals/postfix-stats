@@ -96,13 +96,13 @@ class BounceHandler(Handler):
 
 class RejectHandler(Handler):
     facilities = set(['smtpd'])
-    filter_re = re.compile((r'\A(?P<status>\w+?): reject: RCPT from (?P<from_host>\w+?)\[(?P<client_ip>[A-Fa-f0-9.:]{3,39})\].*'))
+    filter_re = re.compile((r'\A(?P<status>\w+?): reject: RCPT from (?P<from_host>\w+?)\[(?P<client_ip>[A-Fa-f0-9.:]{3,39})\]: 550 (?P<dsn>[0-9\.]+).*'))
 
     @classmethod
-    def handle(self, status=None, from_host=None, client_ip=None):
+    def handle(self, status=None, from_host=None, client_ip=None, dsn=None):
         stats['recv']['status']['rejected'] += 1
         stats['clients'][client_ip] += 1
-        print status, from_host, client_ip
+        stats['recv']['resp_codes'][dsn] += 1
 
 class CleanupHandler(Handler):
     facilities = set(['cleanup'])
