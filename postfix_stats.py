@@ -321,6 +321,10 @@ def main(logs, daemon=False, host='127.0.0.1', port=7777, concurrency=2, local_e
 
     parser_pool.join()
 
+
+    if kwargs['hideclients']:
+        stats["clients"] = None
+
     if not daemon:
         print json.dumps(stats, indent=2)
     else:
@@ -346,6 +350,9 @@ if __name__ == '__main__':
         help="Search for STRING in incoming email addresses and incr stat NAME and if COUNT, count in incoming - STRING,NAME,COUNT", metavar="LOCAL_TUPLE")
     opt_parser.add_option("-r", "--relay-mode", dest="relay", default=False, action="store_true",
         help="Activate the aggregator in relay-mode")
+    opt_parser.add_option("-z", "--ignore-clients", dest="hideclients", default=False, action="store_true",
+        help="Dont output stats per ip")
+
 
     (options, args) = opt_parser.parse_args()
 
