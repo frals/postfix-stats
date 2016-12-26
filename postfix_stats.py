@@ -43,6 +43,10 @@ stats['in'] = {
 stats['relay_clients'] = defaultdict(lambda: defaultdict(int))
 stats['clients'] = defaultdict(int)
 stats['local'] = defaultdict(int)
+stats['amavis'] = {
+        'spam': 0,
+        'virus': 0,
+}
 
 local_addresses = {}
 
@@ -90,6 +94,15 @@ class BounceHandler(Handler):
     def handle(self, message_id=None, bounce_message_id=None):
         pass
 
+class RejectHandler(Handler):
+    facilities = set(['smtpd'])
+    filter_re = re.compile((r'\A(?P<status>\w+?): reject: RCPT from (?P<from_host>\w+?)\[(?P<client_ip>[A-Fa-f0-9.:]{3,39})\].*'))
+
+    @classmethod
+    def handle(self, status=None, from_host=None, client_ip=None):
+        stats['recv']['status']['rejected'] += 1
+        stats['clients'][client_ip] += 1
+        print status, from_host, client_ip
 
 class CleanupHandler(Handler):
     facilities = set(['cleanup'])
@@ -165,6 +178,18 @@ class SmtpdHandler(Handler):
         else:
             stats['relay_clients'][self.component][ip] += 1
 
+class AmavisHandler(Handler):
+    facilities = set(['amavis'])
+    filter_re = re.compile(r'.*((?P<spam>SPAM)|(?P<virus>INFECTED)).*')
+
+    @classmethod
+    def handle(self, spam=None, virus=None):
+        if spam is not None:
+            stats['amavis']['spam'] += 1
+        elif virus is not None:
+            stats['amavis']['virus'] += 1
+
+
 class Parser(Thread):
     line_re = re.compile(r'\A(?P<iso_date>\D{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(?P<source>.+?)\s+(?P<facility>.+?)\[(?P<pid>\d+?)\]:\s(?P<message>.*)\Z')
 
@@ -188,12 +213,17 @@ class Parser(Thread):
 
     def parse_line(self, line):
         pln = self.line_re.match(line)
-
+        
         if pln:
             pline = pln.groupdict()
             logger.debug(pline)
 
-            component, facility = pline['facility'].split('/')
+            splits = pline['facility'].split('/')
+            if len(splits) == 2:
+                component, facility = pline['facility'].split('/')
+            else:
+                component = facility = splits[-1]
+            
             component = component.replace('postfix-', '') if relay_mode else None
             pline['component'] = component
 
@@ -265,7 +295,7 @@ def main(logs, daemon=False, host='127.0.0.1', port=7777, concurrency=2, local_e
     else:
         local_addresses_re = re.compile(r'(?!)')
 
-    handlers = (LocalHandler(local_addresses_re), SmtpHandler(), SmtpdHandler())
+    handlers = (LocalHandler(local_addresses_re), SmtpHandler(), SmtpdHandler(), AmavisHandler(), BounceHandler(), RejectHandler())
 
     if daemon:
         server = ThreadedTCPServer((host, port), CommandHandler)
